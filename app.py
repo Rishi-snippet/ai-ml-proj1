@@ -9,18 +9,60 @@ import os
 # 🔑 Robust API KEY LOADING (FIXED)
 # -------------------------------------------------
 
+# -------------------------------------------------
+# 🔑 HARDENED GROQ KEY LOADING + AUTO FIXES
+# -------------------------------------------------
+
 load_dotenv()
 
-groq_api_key = (
-    os.getenv("GROQ_API_KEY")  # local .env or system env
-    or st.secrets.get("GROQ_API_KEY", None)  # Streamlit Cloud secrets
-)
+def get_groq_key():
+    # priority: env → secrets
+    key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", "")
 
+    if not key:
+        return None
+
+    # ---- sanitize common formatting mistakes ----
+    key = key.strip()                 # remove spaces/newlines
+    key = key.replace('"', "")        # remove quotes
+    key = key.replace("'", "")        # remove quotes
+
+    return key
+
+
+groq_api_key = get_groq_key()
+
+# ---- validations ----
 if not groq_api_key:
     st.error(
         "❌ GROQ_API_KEY not found.\n\n"
-        "• Local: add to .env file\n"
-        "• Streamlit Cloud: Manage App → Secrets → GROQ_API_KEY"
+        "Add it in:\n"
+        "• Streamlit Cloud → Manage App → Secrets\n"
+        "OR\n"
+        "• .env file locally"
+    )
+    st.stop()
+
+if not groq_api_key.startswith("gsk_"):
+    st.error(
+        "❌ Invalid key format.\n\n"
+        "Groq keys must start with: gsk_\n"
+        "You probably pasted an OpenAI/HF key by mistake."
+    )
+    st.stop()
+
+# ---- safe initialization ----
+try:
+    langchain_llm = ChatGroq(
+        api_key=groq_api_key,
+        model="llama-3.3-70b-versatile"
+    )
+except Exception:
+    st.error(
+        "❌ Authentication failed (401).\n\n"
+        "Regenerate a fresh key from:\n"
+        "https://console.groq.com/keys\n"
+        "Then update Secrets and reboot."
     )
     st.stop()
 
